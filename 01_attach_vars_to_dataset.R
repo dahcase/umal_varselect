@@ -46,17 +46,21 @@ assign_ras_var = function(params, pr){
       rasvals = cbind(rasvals,rasvals)
     }
     
-    prcit = prcit[city_name == cit, paste0(paste(params, collapse = '-'), c('-rainy', '-dry')) := list(rasvals[,1], rasvals[,2])]
+    prcit = prcit[city_name == cit, (paste0(paste(params, collapse = '-'), c('-rainy', '-dry'))) := list(rasvals[,1], rasvals[,2])]
   }
   
   return(prcit[,  paste0(paste(params, collapse = '-'), c('-rainy', '-dry')), with = F])
 }
 
-res = mclapply(1:nrow(rasvars), function(x) assign_ras_var(rasvars[x, ], pr), mc.cores = 5)
+guides = unique(rasvars[,.(funk,time,product,variables)])
+res = mclapply(1:nrow(guides), function(x) assign_ras_var(guides[x, ], pr), mc.cores = 5)
 
 results = do.call(cbind, res)
 
+#generate custom indices
+
 #save adjusted dataset
-saveRDS(results, paste0(outdir, 'extracted_variables.rds'))
+saveRDS(cbind(pr, results), paste0(outdir, 'extracted_variables.rds'))
+saveRDS(names(results), paste0(outdir, 'extracted_var_names.rds'))
 
 
