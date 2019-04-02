@@ -51,7 +51,7 @@ setDT(model_grid)
 #for each product and and variable combination, find the best variable
 all_mods = sapply(seq(nrow(model_grid)), function(x) fit_model(pr = train,
                                                                iv = model_grid[x,var],
-                                                               flagflag = which(folds[,model_grid[x,round]]==model_grid[x,fold]),
+                                                               flagflag = which(folds[,model_grid[x,round]] != model_grid[x,fold]),
                                                                ret_opt = 'rmse'))
 #Compute overall RMSE
 model_grid[, rmse := all_mods]
@@ -95,9 +95,8 @@ imodgrid = expand.grid(id = seq(nrow(inters)), fold = 1:nfolds, round = 1:nround
 setDT(imodgrid)
 intermods = sapply(seq(nrow(imodgrid)), function(x) fit_model(pr = train,
                                                                iv = unlist(inters[imodgrid[x,id], .(a,b)]),
-                                                               flagflag = which(folds[,imodgrid[x,round]]==imodgrid[x,fold]),
+                                                               flagflag = which(folds[,imodgrid[x,round]]!=imodgrid[x,fold]),
                                                                ret_opt = 'rmse'))
-
 
 
 imodgrid[, rmse:= intermods]
@@ -142,7 +141,7 @@ for(iii in seq(nrow(i_effs))){
   train[, paste0(v1,'_',v2) := get(v1) * get(v2)]
 }
 
-#check correlation (they all seem ok)
+#check correlation
 correlate = cor(na.omit(train[,keepers[,finale],with = F]))
 rrr = row.names(correlate)
 correlate = data.table(correlate)
@@ -150,7 +149,24 @@ correlate[, row_var := rrr]
 correlate = melt(correlate, id.vars = 'row_var', variable.factor = F)
 correlate = correlate[row_var != variable,]
 
-#compute importance via xgboost
-import = expand.grid(fold = 1:nfolds, round = 1:nrounds)
+#remove over .8
+bad_cor = correlate[abs(value)> .8]
+bad_cor[, id:= .I]
+vnames = c('row_var','variable')
+bad_cor[, v1 := get(vnames[order(unlist(.SD))[1]]), by = 'id', .SDcols = vnames]
+bad_cor[, v2 := get(vnames[order(unlist(.SD))[2]]), by = 'id',  .SDcols = vnames]
+bad_cor = unique(bad_cor[, .(v1, v2)])
 
-#assess OOS fit
+#do it alphabetically
+rrr = rrr[!rrr %in% bad_cor[,1]]
+
+#compute importance via xgboost
+ig = expand.grid(fold = 1:nfolds, round = 1:nrounds)
+
+import_res = lapply(1:nrow(import_grid), function(x) fit_xgb(pr = train, iv = rrr,
+                                                             flagflag = which(folds[, ig[x, 'round']] != ig[x, 'fold']), #id the hold out
+                                                             ret_opt = 'importance'))
+
+
+
+#assess xgboost importance
