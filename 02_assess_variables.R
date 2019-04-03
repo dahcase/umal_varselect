@@ -2,8 +2,9 @@
 library('data.table')
 library('raster')
 library('mgcv')
+library('ggplot2')
 
-outdir = '/media/dan/variable_selection/v1/'
+outdir = '/media/dan/variable_selection/v2/'
 nfolds = 5
 nrounds = 5
 source('~/Documents/code/umal_varselect/assess_variables_functions.R')
@@ -64,7 +65,17 @@ unders = sapply(gregexpr("_", best_prodvar[prod == 'MCD43A4' & !grepl('Reflectan
 best_prodvar[prod == 'MCD43A4' & !grepl('Reflectance', var_name, fixed = T), var := substr(var, 1, unders-1)]
 best_prodvar = best_prodvar[best_prodvar[, .I[which.min(rmse)], by = c('var', 'prod')]$V1]
 
+best_prodvar[,id := .I]
+best_prodvar[, var := toupper(var)]
+
+#keep best srtm
+best_prodvar = best_prodvar[prod != 'srtm' | id == best_prodvar[prod == 'srtm',][which.min(rmse), id],]
+
+#keep best version of indices
+best_prodvar = best_prodvar[best_prodvar[, .I[which.min(rmse)], by = c('var')]$V1]
+
 new_goodies = best_prodvar[, var_name]
+
 
 #for the "goodies" variables, compute the spline transformation, all insample
 trans_vars = lapply(new_goodies, function(x) fit_model(pr = train,
@@ -93,12 +104,12 @@ inters[, c('a','b') := list(paste0('s_',a), paste0('s_', b))]
 #analyze these additional models
 imodgrid = expand.grid(id = seq(nrow(inters)), fold = 1:nfolds, round = 1:nrounds)
 setDT(imodgrid)
-intermods = sapply(seq(nrow(imodgrid)), function(x) fit_model(pr = train,
+intermods = parallel::mclapply(seq(nrow(imodgrid)), function(x) fit_model(pr = train,
                                                                iv = unlist(inters[imodgrid[x,id], .(a,b)]),
                                                                flagflag = which(folds[,imodgrid[x,round]]!=imodgrid[x,fold]),
-                                                               ret_opt = 'rmse'))
+                                                               ret_opt = 'rmse'), mc.cores = 4)
 
-
+intermods = unlist(intermods)
 imodgrid[, rmse:= intermods]
 inters[, rmse := imodgrid[, list(rmse = mean(rmse)), by = 'id'][,rmse]]
 
@@ -141,6 +152,16 @@ for(iii in seq(nrow(i_effs))){
   train[, paste0(v1,'_',v2) := get(v1) * get(v2)]
 }
 
+#get the spline transformed values
+trans_inter_vars = lapply(1:nrow(i_effs), function(x) fit_model(pr = train,
+                                                       iv = c(i_effs[x,vvv1], i_effs[x,vvv2]),
+                                                       ret_opt = 'spline_vals'))
+
+train[, paste0('s_', i_effs[, finale]) := trans_inter_vars]
+
+#adjsut finale
+keepers[!is.na(vvv2), finale:= paste0('s_', finale)]
+
 #check correlation
 correlate = cor(na.omit(train[,keepers[,finale],with = F]))
 rrr = row.names(correlate)
@@ -153,20 +174,165 @@ correlate = correlate[row_var != variable,]
 bad_cor = correlate[abs(value)> .8]
 bad_cor[, id:= .I]
 vnames = c('row_var','variable')
-bad_cor[, v1 := get(vnames[order(unlist(.SD))[1]]), by = 'id', .SDcols = vnames]
-bad_cor[, v2 := get(vnames[order(unlist(.SD))[2]]), by = 'id',  .SDcols = vnames]
-bad_cor = unique(bad_cor[, .(v1, v2)])
-
-#do it alphabetically
-rrr = rrr[!rrr %in% bad_cor[,1]]
+if(nrow(bad_cor)>0){
+  bad_cor[, v1 := get(vnames[order(unlist(.SD))[1]]), by = 'id', .SDcols = vnames]
+  bad_cor[, v2 := get(vnames[order(unlist(.SD))[2]]), by = 'id',  .SDcols = vnames]
+  bad_cor = unique(bad_cor[, .(v1, v2)])
+  
+  #do it alphabetically
+  rrr = rrr[!rrr %in% bad_cor[,1]]
+}
 
 #compute importance via xgboost
 ig = expand.grid(fold = 1:nfolds, round = 1:nrounds)
 
-import_res = lapply(1:nrow(import_grid), function(x) fit_xgb(pr = train, iv = rrr,
-                                                             flagflag = which(folds[, ig[x, 'round']] != ig[x, 'fold']), #id the hold out
+import_res = lapply(1:100, function(x) fit_xgb(pr = train, iv = rrr,
+                                                             flagflag = sample(1:nrow(train),size = nrow(train), replace = T), #bootstraps
                                                              ret_opt = 'importance'))
 
+avg_import_res = rbindlist(import_res)
+avg_import_res = avg_import_res[,list(Gain = mean(Gain), Cover = mean(Cover), Frequency = mean(Frequency),
+                                      lower_Gain = quantile(Gain, .025), upper_Gain = quantile(Gain, .975)), by = 'Feature']
+setorder(avg_import_res, -Gain)
+
+# RMSE_res = lapply(1:nrow(ig), function(x) fit_xgb(pr = train, iv = rrr,
+#                                                     flagflag = which(folds[, ig[x, 'round']] != ig[x, 'fold']), #id the hold out
+#                                                     ret_opt = 'rmse'))
+# avg_rmse_xg = mean(unlist(RMSE_res))
+
+full_xg = fit_xgb(pr = train, iv = rrr, flagflag = 1:nrow(train), ret_opt = 'model')
+
+full_xg = xgboost::xgb.load(full_xg)
+
+#graphics for the presentation
+
+#Graph 1: pfpr data over time and city
+g1 = ggplot(train, aes(x = YEAR, y = cases /(cases + not_cases), size = (cases + not_cases))) + geom_point() + facet_wrap(~city_name) +
+  theme_bw() + scale_size_continuous('N', guide = guide_legend()) + ggtitle('PfPR 2-10 Data by City') +
+  xlab('') + ylab('PfPR 2 - 10') + 
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 18, angle = 90),
+        axis.text.y = element_text(size = 18),
+        plot.title = element_text(size = 22),
+        axis.title.y = element_text(size = 20))
+plot(g1)
+
+ggsave(paste0(outdir, 'pfpr_data_plot.png'), g1, width = 15, height = 12, units = 'in', dpi = 600)
 
 
-#assess xgboost importance
+#graph 2 & 3: Scatter plots of variables before and after transform
+train[, v1 := `min-rainydry-MCD43A4-evi_2_16`]
+train[, v2 :=  `s_min-rainydry-MCD43A4-evi_2_16`]
+g2 = ggplot(train, aes(x = (v1), y = (v2))) + geom_point() + theme_bw() + xlab('(min) EVI') + ylab('Transformed EVI') +
+  ggtitle('EVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v1], c(.025,.975), na.rm = T)[1:2]) +
+  scale_y_continuous(limits = quantile(train[,v2], c(.025,.975), na.rm = T)) +
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 18),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20))
+plot(g2)
+ggsave(paste0(outdir, 'evi_v_trans_evi.png'), g2, width = 15, height = 12, units = 'in', dpi = 600)
+
+
+train[, v3 := `s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
+train[, v4 :=  `s_s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
+g3 = ggplot(train, aes(x = (v3), y = (v4))) + geom_point() + theme_bw() + xlab('NTL * EVI') + ylab('Transformed NTL * EVI') +
+  ggtitle('Elevation * EVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v3], c(.025,.975), na.rm = T)[1:2]) +
+  scale_y_continuous(limits = quantile(train[,v4], c(.025,.975), na.rm = T)) +
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 18),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20))
+plot(g3)
+ggsave(paste0(outdir, 'ndvi_x_ndwi.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
+
+#variable importance
+vl = c('EVI', 'NDVI', 'Band7 * EVI', 'NDVI * NDWI', 'Band1', 'NDWI * LST Night',
+       'Band2 * Band7', 'NDVI * Band4', 'NDVI * NTL', 'Band3', 'EVI * Band5', 'NDVI * Aspect', 'EVI * LST Day')
+var_cw = data.table(Feature = paste0('ivar', 1:length(rrr)), var_name = rrr,
+                                     var_label = vl)
+avg_import_res = merge(avg_import_res, var_cw, by = 'Feature', all.x = T)
+avg_import_res[is.na(var_label), var_label := Feature]
+avg_import_res[, var_label_fact := reorder(var_label, Gain)]
+
+g4 = ggplot(avg_import_res, aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
+  theme_bw() + xlab('Importance/Gain') + ylab('') + ggtitle('Variable Importance via BRT') +
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20))
+plot(g4)
+ggsave(paste0(outdir, 'var_importance.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
+
+#RMSE ranking
+rmse_table = merge(var_cw, keepers, by.x = 'var_name', by.y ='finale', all.x = T)
+rmse_table = rmse_table[, .(var_label, rmse)]
+write.csv(rmse_table, paste0(outdir, 'var_rmse.csv', row.names = F))
+
+#transformed variables
+#load dakar
+ras = brick("/media/dan/processed///summary//MCD43A4/rainydry/max/Bamako_MCD43A4_006_ndwi_nirswi_2_8_2001_2016_rainydry_max.tif")
+mod = fit_model(pr = train, iv = 'max-rainydry-MCD43A4-ndwi_nirswi_2_8', ret_opt = 'model' )
+
+pres = as.data.frame(ras, xy = T)
+setDT(pres)
+pres[,pixel_id := .I]
+setnames(pres, c('x', 'y', 'dry', 'rainy', 'id'))
+
+pres = melt(pres, id.vars = c('id', 'x', 'y'), variable.factor = F, value.name = 'ivar')
+pres[, wetdry:=as.numeric(variable == 'rainy')]
+pres[, city_name_id := 4]
+
+pres[, mod_res := predict(mod, newdata = pres)]
+pres[variable== 'dry', variable := 'Dry Season']
+pres[variable == 'rainy', variable := 'Rainy Season']
+pres[, NDWI := scale(ivar)]
+pres[, Season := variable]
+pre = ggplot(pres, aes(x = x, y = y, fill = NDWI)) + geom_raster() + facet_wrap(~variable ) + theme_bw() + 
+  ggtitle('Bamako | NDWI | Pre-transformed') +
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20))
+plot(pre)
+ggsave(paste0(outdir, 'ndwi_pre.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)
+
+pres[,NDWI := sale(mod_res)]
+post = ggplot(pres, aes(x = x, y = y, fill = NDWI)) + geom_raster() + facet_wrap(~variable ) + theme_bw() + 
+  ggtitle('Bamako | NDWI | Pre-transformed') +
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20))
+plot(post)
+ggsave(paste0(outdir, 'ndwi_post.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)
+
+compare = ggplot(pres, aes(x = ivar, y = mod_res, group = Season, color = Season)) + geom_line(size = 3) + theme_bw() + 
+  ggtitle('Bamako: NDWI') + xlab('NDWI') + ylab('Transformed NDWI') + 
+  theme(legend.position="bottom",
+        strip.text.x = element_text(size = 14),
+        axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(size = 22),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        legend.text = element_text(size = 14),
+        legend.title = element_blank())
+plot(compare)
+ggsave(paste0(outdir, 'ndwi_post.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)

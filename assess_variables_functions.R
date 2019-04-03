@@ -110,8 +110,8 @@ fit_xgb = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rmse'
                                        subsample = .6, colsample_bytree = .75),
                          nrounds = 3000, verbose = F)
   
-  insamp = predict(mod, newdata = xgboost::xgb.DMatrix(data = as.matrix(rhs[,ptors, with = F])))
-  plot(lhs, insamp)
+  #insamp = predict(mod, newdata = xgboost::xgb.DMatrix(data = as.matrix(rhs[,ptors, with = F])))
+  #plot(lhs, insamp)
   
   if(ret_opt == 'model'){
     return(xgboost::xgb.save.raw(mod))
@@ -121,6 +121,8 @@ fit_xgb = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rmse'
   }else if(ret_opt == 'preds'){
     preds = predict(mod, newdata = xgboost::xgb.DMatrix(data = as.matrix(rhs[,ptors, with = F])))
   }else{
-    return(xgboost:xgb.importance(model = mod))
+    return(xgboost::xgb.importance(model = mod))
   }
 }
+
+

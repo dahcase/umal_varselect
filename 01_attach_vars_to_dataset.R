@@ -4,7 +4,8 @@ library("raster")
 library('openxlsx')
 
 #load the data
-outdir = '/media/dan/variable_selection/v1/'
+outdir = '/media/dan/variable_selection/v2/'
+dir.create(outdir)
 pr = read.xlsx('/media/dan/REACT SSA Cities PR data (240717)_Final.xlsx')
 setDT(pr)
 city_shape = st_read("/home/dan/Documents/react_data/Cities_React/study_areas.shp")
@@ -46,10 +47,10 @@ assign_ras_var = function(params, pr){
       rasvals = cbind(rasvals,rasvals)
     }
     
-    prcit = prcit[city_name == cit, (paste0(paste(params, collapse = '-'), c('-rainy', '-dry'))) := list(rasvals[,1], rasvals[,2])]
+    prcit = prcit[city_name == cit, (paste0(paste(params, collapse = '-'), c('-dry', '-rainy'))) := list(rasvals[,1], rasvals[,2])]
   }
   
-  return(prcit[,  paste0(paste(params, collapse = '-'), c('-rainy', '-dry')), with = F])
+  return(prcit[,  paste0(paste(params, collapse = '-'), c('-dry', '-rainy')), with = F])
 }
 
 guides = unique(rasvars[,.(funk,time,product,variables)])
