@@ -211,11 +211,13 @@ g1 = ggplot(train, aes(x = YEAR, y = cases /(cases + not_cases), size = (cases +
   theme_bw() + scale_size_continuous('N', guide = guide_legend()) + ggtitle('PfPR 2-10 Data by City') +
   xlab('') + ylab('PfPR 2 - 10') + 
   theme(legend.position="bottom",
-        strip.text.x = element_text(size = 14),
-        axis.text.x = element_text(size = 18, angle = 90),
-        axis.text.y = element_text(size = 18),
-        plot.title = element_text(size = 22),
-        axis.title.y = element_text(size = 20))
+        strip.text.x = element_text(size = 20),
+        axis.text.x = element_text(size = 23, angle = 90),
+        axis.text.y = element_text(size = 23),
+        plot.title = element_text(size = 30),
+        axis.title.y = element_text(size = 20),
+        legend.text = element_text(size = 24),
+        legend.title = element_text(size = 24))
 plot(g1)
 
 ggsave(paste0(outdir, 'pfpr_data_plot.png'), g1, width = 15, height = 12, units = 'in', dpi = 600)
@@ -229,11 +231,11 @@ g2 = ggplot(train, aes(x = (v1), y = (v2))) + geom_point() + theme_bw() + xlab('
   scale_y_continuous(limits = quantile(train[,v2], c(.025,.975), na.rm = T)) +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
-        axis.text.x = element_text(size = 18),
-        axis.text.y = element_text(size = 18),
-        plot.title = element_text(size = 22),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_text(size = 20))
+        axis.text.x = element_text(size = 22),
+        axis.text.y = element_text(size = 22),
+        plot.title = element_text(size = 30),
+        axis.title.x = element_text(size = 25),
+        axis.title.y = element_text(size = 25))
 plot(g2)
 ggsave(paste0(outdir, 'evi_v_trans_evi.png'), g2, width = 15, height = 12, units = 'in', dpi = 600)
 
@@ -241,15 +243,15 @@ ggsave(paste0(outdir, 'evi_v_trans_evi.png'), g2, width = 15, height = 12, units
 train[, v3 := `s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
 train[, v4 :=  `s_s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
 g3 = ggplot(train, aes(x = (v3), y = (v4))) + geom_point() + theme_bw() + xlab('NTL * EVI') + ylab('Transformed NTL * EVI') +
-  ggtitle('Elevation * EVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v3], c(.025,.975), na.rm = T)[1:2]) +
+  ggtitle('NDWI * NDVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v3], c(.025,.975), na.rm = T)[1:2]) +
   scale_y_continuous(limits = quantile(train[,v4], c(.025,.975), na.rm = T)) +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
-        axis.text.x = element_text(size = 18),
-        axis.text.y = element_text(size = 18),
-        plot.title = element_text(size = 22),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_text(size = 20))
+        axis.text.x = element_text(size = 22),
+        axis.text.y = element_text(size = 22),
+        plot.title = element_text(size = 30),
+        axis.title.x = element_text(size = 25),
+        axis.title.y = element_text(size = 25))
 plot(g3)
 ggsave(paste0(outdir, 'ndvi_x_ndwi.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
 
@@ -262,22 +264,22 @@ avg_import_res = merge(avg_import_res, var_cw, by = 'Feature', all.x = T)
 avg_import_res[is.na(var_label), var_label := Feature]
 avg_import_res[, var_label_fact := reorder(var_label, Gain)]
 
-g4 = ggplot(avg_import_res, aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
+g4 = ggplot(avg_import_res[!var_label %in% unique(pr$city_name), ], aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
   theme_bw() + xlab('Importance/Gain') + ylab('') + ggtitle('Variable Importance via BRT') +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
-        axis.text.x = element_text(size = 14),
-        axis.text.y = element_text(size = 14),
-        plot.title = element_text(size = 22),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 21),
+        plot.title = element_text(size = 30),
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 20))
 plot(g4)
-ggsave(paste0(outdir, 'var_importance.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
+ggsave(paste0(outdir, 'var_importance.png'), g4, width = 15, height = 12, units = 'in', dpi = 600)
 
 #RMSE ranking
 rmse_table = merge(var_cw, keepers, by.x = 'var_name', by.y ='finale', all.x = T)
 rmse_table = rmse_table[, .(var_label, rmse)]
-write.csv(rmse_table, paste0(outdir, 'var_rmse.csv', row.names = F))
+write.csv(rmse_table, paste0(outdir, 'var_rmse.csv'), row.names = F)
 
 #transformed variables
 #load dakar
@@ -298,41 +300,45 @@ pres[variable== 'dry', variable := 'Dry Season']
 pres[variable == 'rainy', variable := 'Rainy Season']
 pres[, NDWI := scale(ivar)]
 pres[, Season := variable]
+
+minfill = min(pres[,scale(ivar)], pres[, scale(mod_res)])
+maxfill = max(pres[,scale(ivar)], pres[, scale(mod_res)])
+
 pre = ggplot(pres, aes(x = x, y = y, fill = NDWI)) + geom_raster() + facet_wrap(~variable ) + theme_bw() + 
-  ggtitle('Bamako | NDWI | Pre-transformed') +
+  ggtitle('Bamako | NDWI | Pre-transformed') + scale_fill_continuous(limits = c(minfill, maxfill)) +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
         axis.text.x = element_text(size = 14),
         axis.text.y = element_text(size = 14),
         plot.title = element_text(size = 22),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_text(size = 20))
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +coord_fixed()
 plot(pre)
 ggsave(paste0(outdir, 'ndwi_pre.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)
 
-pres[,NDWI := sale(mod_res)]
+pres[,NDWI := scale(mod_res)]
 post = ggplot(pres, aes(x = x, y = y, fill = NDWI)) + geom_raster() + facet_wrap(~variable ) + theme_bw() + 
-  ggtitle('Bamako | NDWI | Pre-transformed') +
+  ggtitle('Bamako | NDWI | Post-transformed') + scale_fill_continuous(limits = c(minfill, maxfill)) + 
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
         axis.text.x = element_text(size = 14),
         axis.text.y = element_text(size = 14),
         plot.title = element_text(size = 22),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_text(size = 20))
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) + coord_fixed()
 plot(post)
-ggsave(paste0(outdir, 'ndwi_post.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)
+ggsave(paste0(outdir, 'ndwi_post.png'), post, width = 15, height = 12, units = 'in', dpi = 600)
 
 compare = ggplot(pres, aes(x = ivar, y = mod_res, group = Season, color = Season)) + geom_line(size = 3) + theme_bw() + 
   ggtitle('Bamako: NDWI') + xlab('NDWI') + ylab('Transformed NDWI') + 
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
-        axis.text.x = element_text(size = 14),
-        axis.text.y = element_text(size = 14),
-        plot.title = element_text(size = 22),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_text(size = 20),
-        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 17),
+        axis.text.y = element_text(size = 17),
+        plot.title = element_text(size = 30),
+        axis.title.x = element_text(size = 25),
+        axis.title.y = element_text(size = 25),
+        legend.text = element_text(size = 20),
         legend.title = element_blank())
 plot(compare)
-ggsave(paste0(outdir, 'ndwi_post.png'), pre, width = 15, height = 12, units = 'in', dpi = 600)
+ggsave(paste0(outdir, 'ndwi_compare.png'), compare, width = 15, height = 12, units = 'in', dpi = 600)
