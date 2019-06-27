@@ -25,18 +25,20 @@ fit_model = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rms
   rhs[, city_name_id := as.numeric(as.factor(city_name))]
   setDF(rhs)
   
-  if(length(unique(rhs[,'YEAR']))<=1){
-    form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
-  }else{
-    form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
-  }
+  # if(length(unique(rhs[,'YEAR']))<=1){
+  #   form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
+  # }else{
+  #   form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
+  # }
+  form = as.formula('lhs~1 + s(ivar, wetdry, k = 3) + s(city_name_id, bs = "re")')
+  
   #subset by provided indices
   lhs_holdout= lhs[-flagflag,]
   lhs = lhs[flagflag,]
   rhs_holdout = rhs[-flagflag,]
   rhs = rhs[flagflag,]
   
-  mod = gam(form, family = 'binomial', data =rhs)
+  mod = gam(form, family = 'binomial', data =rhs, method = 'REML')
   
   if(ret_opt == 'rmse'){
     preds = c(predict(mod, rhs_holdout, type = 'response'))
@@ -48,7 +50,7 @@ fit_model = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rms
   } else{
     
     svals = predict(mod, rhs, type = 'terms')
-    svals = svals[, which(colnames(svals) == 's(ivar)')]
+    svals = svals[, which(colnames(svals) == 's(ivar,wetdry)')]
     
     return(svals)
     

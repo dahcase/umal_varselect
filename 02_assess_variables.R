@@ -4,14 +4,16 @@ library('raster')
 library('mgcv')
 library('ggplot2')
 
-outdir = '/media/dan/variable_selection/v2/'
+indir = '/media/dan/variable_selection/v2/'
+outdir = '/media/dan/variable_selection/v4/'
+dir.create(outdir)
 nfolds = 5
 nrounds = 5
 source('~/Documents/code/umal_varselect/assess_variables_functions.R')
 
 #laod files
-dat = readRDS(paste0(outdir, 'extracted_variables.rds'))
-var_names = readRDS(paste0(outdir, 'extracted_var_names.rds'))
+dat = readRDS(paste0(indir, 'extracted_variables.rds'))
+var_names = readRDS(paste0(indir, 'extracted_var_names.rds'))
 
 #fill in columns to match by rainy & dry
 uniq_vars = gregexpr('-',var_names, fixed = T)
@@ -224,10 +226,12 @@ ggsave(paste0(outdir, 'pfpr_data_plot.png'), g1, width = 15, height = 12, units 
 
 
 #graph 2 & 3: Scatter plots of variables before and after transform
-train[, v1 := `min-rainydry-MCD43A4-evi_2_16`]
-train[, v2 :=  `s_min-rainydry-MCD43A4-evi_2_16`]
-g2 = ggplot(train, aes(x = (v1), y = (v2))) + geom_point() + theme_bw() + xlab('(min) EVI') + ylab('Transformed EVI') +
-  ggtitle('EVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v1], c(.025,.975), na.rm = T)[1:2]) +
+vartotest = keepers[finale %in% rrr & is.na(vvv2), vvv1 ][1]
+
+train[, v1 := get(substr(vartotest, 3, 100))]
+train[, v2 :=  get(vartotest)]
+g2 = ggplot(train, aes(x = (v1), y = (v2), color = value)) + geom_point() + theme_bw() + xlab('Original') + ylab('Transformed') +
+  ggtitle(substr(vartotest, 3, 100)) + scale_x_continuous(limits = quantile(train[,v1], c(.025,.975), na.rm = T)[1:2]) +
   scale_y_continuous(limits = quantile(train[,v2], c(.025,.975), na.rm = T)) +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
@@ -237,13 +241,15 @@ g2 = ggplot(train, aes(x = (v1), y = (v2))) + geom_point() + theme_bw() + xlab('
         axis.title.x = element_text(size = 25),
         axis.title.y = element_text(size = 25))
 plot(g2)
-ggsave(paste0(outdir, 'evi_v_trans_evi.png'), g2, width = 15, height = 12, units = 'in', dpi = 600)
+ggsave(paste0(outdir, 'single_transform.png'), g2, width = 15, height = 12, units = 'in', dpi = 600)
 
 
-train[, v3 := `s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
-train[, v4 :=  `s_s_max-rainydry-MCD43A4-ndvi_2_16_s_max-rainydry-MCD43A4-ndwi_nirswi_2_8`]
-g3 = ggplot(train, aes(x = (v3), y = (v4))) + geom_point() + theme_bw() + xlab('NTL * EVI') + ylab('Transformed NTL * EVI') +
-  ggtitle('NDWI * NDVI; Pre - Post Transform at PfPR observations') + scale_x_continuous(limits = quantile(train[,v3], c(.025,.975), na.rm = T)[1:2]) +
+intertotest = keepers[finale %in% rrr & !is.na(vvv2), finale ][1]
+
+train[, v3 := get(substr(intertotest, 3, 100))]
+train[, v4 :=  get(intertotest)]
+g3 = ggplot(train, aes(x = (v3), y = (v4), color = value)) + geom_point() + theme_bw() + xlab('Pre-transform') + ylab('Post Transform') +
+  ggtitle(intertotest) + scale_x_continuous(limits = quantile(train[,v3], c(.025,.975), na.rm = T)[1:2]) +
   scale_y_continuous(limits = quantile(train[,v4], c(.025,.975), na.rm = T)) +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
@@ -253,18 +259,18 @@ g3 = ggplot(train, aes(x = (v3), y = (v4))) + geom_point() + theme_bw() + xlab('
         axis.title.x = element_text(size = 25),
         axis.title.y = element_text(size = 25))
 plot(g3)
-ggsave(paste0(outdir, 'ndvi_x_ndwi.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
+ggsave(paste0(outdir, 'inter_transform.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
 
 #variable importance
-vl = c('EVI', 'NDVI', 'Band7 * EVI', 'NDVI * NDWI', 'Band1', 'NDWI * LST Night',
-       'Band2 * Band7', 'NDVI * Band4', 'NDVI * NTL', 'Band3', 'EVI * Band5', 'NDVI * Aspect', 'EVI * LST Day')
+vl = rrr #c('EVI', 'NDVI', 'Band7 * EVI', 'NDVI * NDWI', 'Band1', 'NDWI * LST Night',
+#        'Band2 * Band7', 'NDVI * Band4', 'NDVI * NTL', 'Band3', 'EVI * Band5', 'NDVI * Aspect', 'EVI * LST Day')
 var_cw = data.table(Feature = paste0('ivar', 1:length(rrr)), var_name = rrr,
-                                     var_label = vl)
+                                      var_label = vl)
 avg_import_res = merge(avg_import_res, var_cw, by = 'Feature', all.x = T)
 avg_import_res[is.na(var_label), var_label := Feature]
 avg_import_res[, var_label_fact := reorder(var_label, Gain)]
 
-g4 = ggplot(avg_import_res[!var_label %in% unique(pr$city_name), ], aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
+g4 = ggplot(avg_import_res[!var_label %in% unique(dat$city_name), ], aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
   theme_bw() + xlab('Importance/Gain') + ylab('') + ggtitle('Variable Importance via BRT') +
   theme(legend.position="bottom",
         strip.text.x = element_text(size = 14),
