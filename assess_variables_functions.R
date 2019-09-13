@@ -7,11 +7,19 @@ make_folds = function(numrows, numfolds = 8, numsets = 1){
 }
 
 #For each variable, fit a GAM of the form cbind(cases, not cases) ~ s(variable) + reff(city) & capture AIC
-fit_model = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rmse', 'spline_vals')){
+fit_model = function(pr, iv, fold_col = "", ret_opt = 'rmse'){
   #print(iv)
   
+  pr = copy(pr)
+  
+  if(fold_col == ''){
+    pr[, foldy := -1]
+  }else{
+    pr[, foldy := .SD, .SDcols = fold_col]
+  }
+  
   lhs = cbind(pr[,cases], pr[,not_cases])
-  rhs = pr[, c('city_name', iv, 'value', 'YEAR'), with = F]
+  rhs = pr[, c('city_name', iv, 'value', 'YEAR', 'foldy'), with = F]
   
   if(length(iv)==1){
     setnames(rhs, iv, 'ivar')
@@ -23,38 +31,46 @@ fit_model = function(pr, iv, flagflag = seq(nrow(pr)), ret_opt = c('model', 'rms
   
   rhs[, wetdry := as.integer(value == 'Wet')]
   rhs[, city_name_id := as.numeric(as.factor(city_name))]
+
+  flaggys = lapply(unique(rhs[, foldy]), function(x) which(rhs[,foldy] == x))
   setDF(rhs)
   
-  # if(length(unique(rhs[,'YEAR']))<=1){
-  #   form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
-  # }else{
-  #   form = as.formula('lhs~1 + wetdry + s(ivar) + s(city_name_id, bs = "re")')
-  # }
-  form = as.formula('lhs~1 + s(ivar, wetdry, k = 3) + s(city_name_id, bs = "re")')
+  #fit gams
+  gams = lapply(flaggys, function(x) gam_fitty(lhs, rhs, x, ret_opt))
   
-  #subset by provided indices
+  if(ret_opt == 'rmse'){
+    return(mean(unlist(gams)))
+  }else{
+    return(gams[[1]])
+  }
+}
+
+gam_fitty = function(lhs, rhs, flagflag, ret_opt = c('model', 'rmse')){
+  
+  # #subset by provided indices
   lhs_holdout= lhs[-flagflag,]
   lhs = lhs[flagflag,]
   rhs_holdout = rhs[-flagflag,]
   rhs = rhs[flagflag,]
-  
-  mod = gam(form, family = 'binomial', data =rhs, method = 'REML')
+  form = as.formula('lhs~1 + s(ivar, wetdry, k = 3) + s(city_name_id, bs = "re")')
+
+  mod = suppressWarnings(gam(form, family = 'binomial', data =rhs, method = 'REML'))
   
   if(ret_opt == 'rmse'){
-    preds = c(predict(mod, rhs_holdout, type = 'response'))
-    truuf = lhs_holdout[,1]/rowSums(lhs_holdout)
-    rmse = RMSE(preds, truuf)
-    return(rmse)
-  } else if(ret_opt == 'model'){
-    return(mod)
-  } else{
-    
-    svals = predict(mod, rhs, type = 'terms')
-    svals = svals[, which(colnames(svals) == 's(ivar,wetdry)')]
-    
-    return(svals)
-    
-  }
+      preds = c(predict(mod, rhs_holdout, type = 'response'))
+      truuf = lhs_holdout[,1]/rowSums(lhs_holdout)
+      rmse = RMSE(preds, truuf)
+      return(rmse)
+    } else if(ret_opt == 'model'){
+      return(mod)
+    } else{
+  
+      svals = predict(mod, rhs, type = 'terms')
+      svals = svals[, which(colnames(svals) == 's(ivar,wetdry)')]
+  
+      return(svals)
+  
+    }
   
 }
 

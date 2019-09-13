@@ -197,6 +197,14 @@ avg_import_res = avg_import_res[,list(Gain = mean(Gain), Cover = mean(Cover), Fr
                                       lower_Gain = quantile(Gain, .025), upper_Gain = quantile(Gain, .975)), by = 'Feature']
 setorder(avg_import_res, -Gain)
 
+vl = rrr #c('EVI', 'NDVI', 'Band7 * EVI', 'NDVI * NDWI', 'Band1', 'NDWI * LST Night',
+#        'Band2 * Band7', 'NDVI * Band4', 'NDVI * NTL', 'Band3', 'EVI * Band5', 'NDVI * Aspect', 'EVI * LST Day')
+var_cw = data.table(Feature = paste0('ivar', 1:length(rrr)), var_name = rrr,
+                    var_label = vl)
+avg_import_res = merge(avg_import_res, var_cw, by = 'Feature', all.x = T)
+avg_import_res[is.na(var_label), var_label := Feature]
+avg_import_res[, var_label_fact := reorder(var_label, Gain)]
+
 # RMSE_res = lapply(1:nrow(ig), function(x) fit_xgb(pr = train, iv = rrr,
 #                                                     flagflag = which(folds[, ig[x, 'round']] != ig[x, 'fold']), #id the hold out
 #                                                     ret_opt = 'rmse'))
@@ -262,13 +270,6 @@ plot(g3)
 ggsave(paste0(outdir, 'inter_transform.png'), g3, width = 15, height = 12, units = 'in', dpi = 600)
 
 #variable importance
-vl = rrr #c('EVI', 'NDVI', 'Band7 * EVI', 'NDVI * NDWI', 'Band1', 'NDWI * LST Night',
-#        'Band2 * Band7', 'NDVI * Band4', 'NDVI * NTL', 'Band3', 'EVI * Band5', 'NDVI * Aspect', 'EVI * LST Day')
-var_cw = data.table(Feature = paste0('ivar', 1:length(rrr)), var_name = rrr,
-                                      var_label = vl)
-avg_import_res = merge(avg_import_res, var_cw, by = 'Feature', all.x = T)
-avg_import_res[is.na(var_label), var_label := Feature]
-avg_import_res[, var_label_fact := reorder(var_label, Gain)]
 
 g4 = ggplot(avg_import_res[!var_label %in% unique(dat$city_name), ], aes(x = Gain, y = var_label_fact)) + geom_errorbarh(aes(xmin = lower_Gain, xmax = upper_Gain)) + geom_point() +
   theme_bw() + xlab('Importance/Gain') + ylab('') + ggtitle('Variable Importance via BRT') +
