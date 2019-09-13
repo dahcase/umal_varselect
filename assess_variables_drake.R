@@ -44,3 +44,17 @@ identify_goodvars = function(dat, uniq_vars){
   
   
 }
+
+prodvars = function(goodies){
+  
+  best_prodvar = data.table(var_name = goodies)
+  best_prodvar[, c('prod', 'var') := tstrsplit(var_name,'.',fixed = T)[3:4]]
+  unders = sapply(gregexpr("_", best_prodvar[prod == 'MCD43A4' & !grepl('Reflectance', var_name, fixed = T), var], fixed = T), `[[`, 1)
+  best_prodvar[prod == 'MCD43A4' & !grepl('Reflectance', var_name, fixed = T), var := substr(var, 1, unders-1)]
+  best_prodvar[,id := .I]
+  #best_prodvar[, var := toupper(var)]
+  
+  #handle srtm variables differently
+  return(unique(best_prodvar[prod != 'srtm',.(prod, var)]))
+  
+}

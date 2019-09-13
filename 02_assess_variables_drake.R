@@ -29,6 +29,7 @@ uniq_vars = id_uniq_vars(var_names_new)
 set.seed(1)
 prepped = prepare_data(dat, uniq_vars, nfolds = nfolds, nrounds = nrounds)
 goodvars = identify_goodvars(prepped, uniq_vars)
+pvars = prodvars(goodvars)[, paste0(prod,'.',var)]
 
 if(file.exists(paste0(outdir, 'prepped.rds'))){
   ttt = readRDS(paste0(outdir, 'prepped.rds'))
@@ -41,6 +42,10 @@ if(file.exists(paste0(outdir, 'prepped.rds'))){
 }
 fcols = paste0('sfold_', 1:nfolds)
   
+#todo: reorganize this so it processes by pvars
+#that is, for each pvar, run all the permutations, find the best one, continue
+#use the tricks found here: https://github.com/ropensci/drake/issues/697
+
 plan = drake_plan(
   
   #load the data
@@ -55,7 +60,12 @@ plan = drake_plan(
                       transform = cross(variable, fcols = !!fcols)),
   
   #combine those to calculate rmse
-  plain_mods_rmse = target(mean(plain_mods), transform = combine(plain_mods, .by = variable))
+  plain_mods_rmse = target(mean(plain_mods), transform = combine(plain_mods, .by = variable)),
+  
+  #identify which transformation of variable is best
+  pv = target(select_pvar(pvs, plain_mods_rmse), transform = map(pvs = !!pvars)) 
+  
+  #compute all 
   
 )
 
