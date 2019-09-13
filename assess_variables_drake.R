@@ -54,7 +54,26 @@ prodvars = function(goodies){
   best_prodvar[,id := .I]
   #best_prodvar[, var := toupper(var)]
   
+  best_prodvar[, group_var := var]
+  best_prodvar[prod == 'srtm', group_var := '']
+  
   #handle srtm variables differently
-  return(unique(best_prodvar[prod != 'srtm',.(prod, var)]))
+  return(unique(best_prodvar[,.(prod, group_var, iv = var)]))
+  
+}
+
+select_pvar = function(pv, ...){
+
+  dots = list(...)
+  print(names(d))  
+  #select which of the relevant variables belong to a given pv
+  goodones = which(grepl(pv, vapply(dots, function(x) x[[2]], ""), fixed = T))
+  
+  #select the best one
+  best_one = dots[goodones]
+  best_one_idx = which.min(vapply(best_one, function(x) x[[1]], 1))
+  best_one = best_one[[best_one_idx]][[2]]
+  
+  return(best_one)
   
 }

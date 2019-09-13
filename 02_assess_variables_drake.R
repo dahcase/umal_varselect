@@ -29,7 +29,10 @@ uniq_vars = id_uniq_vars(var_names_new)
 set.seed(1)
 prepped = prepare_data(dat, uniq_vars, nfolds = nfolds, nrounds = nrounds)
 goodvars = identify_goodvars(prepped, uniq_vars)
-pvars = prodvars(goodvars)[, paste0(prod,'.',var)]
+# pvars = unique(prodvars(goodvars)[, paste0(prod, '.', group_var)])
+pvars = prodvars(goodvars)
+
+
 
 if(file.exists(paste0(outdir, 'prepped.rds'))){
   ttt = readRDS(paste0(outdir, 'prepped.rds'))
@@ -51,21 +54,12 @@ plan = drake_plan(
   #load the data
   pr = readRDS(file_in(paste0(outdir, 'prepped.rds'))),
   
-  variable = target(vvv, transform = map(vvv = !!goodvars)),
-  
   #fit the first round of models
-  plain_mods = target(fit_model(pr = pr,
-                                iv = variable,
-                                fold_col = fcols),
-                      transform = cross(variable, fcols = !!fcols)),
-  
-  #combine those to calculate rmse
-  plain_mods_rmse = target(mean(plain_mods), transform = combine(plain_mods, .by = variable)),
-  
-  #identify which transformation of variable is best
-  pv = target(select_pvar(pvs, plain_mods_rmse), transform = map(pvs = !!pvars)) 
-  
-  #compute all 
+  plain_mods_rmse = target(gam_cross_val(pr = pr,
+                                iv,
+                                fold_col = !!fcols,
+                                group_var),
+                      transform = map(.data = pvars))
   
 )
 

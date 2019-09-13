@@ -74,6 +74,11 @@ gam_fitty = function(lhs, rhs, flagflag, ret_opt = c('model', 'rmse')){
   
 }
 
+
+gam_cross_val = function(pr, iv, fold_cols, group_var = "", prod = ""){
+  mean(vapply(fold_cols, function(x) fit_model(pr = pr, iv = iv, fold_col = x, ret_opt = 'rmse'), 1))
+}
+
 #no idea why I always have to look this up (https://stackoverflow.com/questions/26237688/rmse-root-mean-square-deviation-calculation-in-r)
 RMSE = function(m, o){
   sqrt(mean((m - o)^2, na.rm = T))
