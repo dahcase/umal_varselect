@@ -45,7 +45,7 @@ fit_model = function(pr, iv, fold_col = "", ret_opt = 'rmse'){
   }
 }
 
-gam_fitty = function(lhs, rhs, flagflag, ret_opt = c('model', 'rmse')){
+gam_fitty = function(lhs, rhs, flagflag, ret_opt = "rmse"){
   
   # #subset by provided indices
   lhs_holdout= lhs[-flagflag,]

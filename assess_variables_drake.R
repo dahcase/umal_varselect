@@ -1,4 +1,4 @@
-id_uniq_vars = function(var_names, nfolds, nrounds){
+id_uniq_vars = function(var_names){
   uniq_vars = gregexpr('.',var_names, fixed = T)
   uniq_vars = sapply(uniq_vars, max)
   uniq_vars = substr(var_names,1,uniq_vars-1)
@@ -58,22 +58,53 @@ prodvars = function(goodies){
   best_prodvar[prod == 'srtm', group_var := '']
   
   #handle srtm variables differently
-  return(unique(best_prodvar[,.(prod, group_var, iv = var)]))
+  return(unique(best_prodvar[,.(prod, group_var, iv = var_name, var)]))
   
 }
 
-select_pvar = function(pv, ...){
+select_pvar = function(...){
 
+  dot_names = names(pryr::named_dots(...))
   dots = list(...)
-  print(names(d))  
-  #select which of the relevant variables belong to a given pv
-  goodones = which(grepl(pv, vapply(dots, function(x) x[[2]], ""), fixed = T))
   
-  #select the best one
-  best_one = dots[goodones]
-  best_one_idx = which.min(vapply(best_one, function(x) x[[1]], 1))
-  best_one = best_one[[best_one_idx]][[2]]
+  best_idx = which.min(unlist(dots))
   
-  return(best_one)
+  best = data.table(target = dot_names[best_idx], rmse = dots[[best_idx]])
+  
+  if(grepl('.', dot_names[best_idx], fixed = T)){
+    #find the last _ before the first .
+    lastunder = gregexpr('_', dot_names[best_idx], fixed = T)[[1]]
+    firstdot = gregexpr('.', dot_names[best_idx], fixed = T)[[1]]
+    startpos = max(lastunder[lastunder<firstdot[1]]) + 1
+    best[, iv1 := substr(target, startpos, nchar(target))]
+    best[, iv2 := NA_character_]
+  }else{
+    new_name = dot_names[best_idx]
+    new_name = gsub('spline_oos_best_version_', "", new_name, fixed = T)
+    new_name = gsub('_best_version_vars_best_version_', "|", new_name, fixed = T)
+    best[, c('iv1', 'iv2') := tstrsplit(new_name, '|', fixed = T)]
+  }
+  return(best)
   
 }
+
+best_trans = function(...){
+  res = rbindlist(list(...))
+  
+  return(res[which.min(rmse),])
+}
+
+
+add_cols_to_pr = function(pr, ...){
+  pr = copy(pr)
+  
+  dot_names = names(pryr::named_dots(...))
+  dots = list(...)
+  
+  
+  pr = pr[, (dot_names) := dots]
+  
+  return(pr)
+  
+}
+
