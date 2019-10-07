@@ -108,3 +108,15 @@ add_cols_to_pr = function(pr, ...){
   
 }
 
+selected_vars = function(...){
+  dot_names = names(pryr::named_dots(...))
+  d = list(...)
+  
+  ret = rbindlist(d)
+  ret[, end_target := dot_names]
+  setnames(ret, 'target', 'start_target')
+  
+  return(ret)
+  
+}
+ldrake = function(x) readd(x, character_only = T, cache = drake_cache(paste0(output, '.drake')))

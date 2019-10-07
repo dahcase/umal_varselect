@@ -5,6 +5,7 @@ library('raster')
 library('mgcv')
 library('ggplot2')
 library('drake')
+library('tidyr')
 
 #Some parameters to get rolling
 indir = '/media/dan/variable_selection/v2/'
@@ -52,41 +53,35 @@ plan = drake_plan(
   #load the data
   pr = readRDS(file_in(paste0(outdir, 'prepped.rds'))),
   
-  #fit the first round of models
+  #The first round of models take every spatial and temporal aggregation and compute the rmse
+  #the resulting targets are the rmse from the cross validated results
   plain_mods_rmse = target(gam_cross_val(pr = pr,
                                 iv,
                                 fold_col = !!fcols),
                       transform = map(.data = !!pvars, .id = c(iv))),
   
-  #find_best amongst each prod/group_var pair
-  best_version = target(select_pvar(plain_mods_rmse),
+  #From the first batch of models (plain_mods_rmse), identify by prod and group var, which has the lowest RMSE
+  # singlevar_best
+  sv_b = target(select_pvar(plain_mods_rmse),
                           transform = combine(plain_mods_rmse, .by = c(prod, group_var))),
+   
+  # get the splined values
+  # The actual splined values (e.g. the predictions) need to be computed so they can be added to the dataset
+  # singlevar_splinevalues
+  sv_sv = target(fit_model(pr = pr, sv_b$iv1, ret_opt = 'svals'),
+                       transform = map(sv_b)),
+  # 
+  # #add values to the dataset
+  pr_s = target(add_cols_to_pr(pr, sv_sv),
+                transform = combine(sv_sv)),
   
-  best_version_vars = target(best_version$iv1, transform = map(best_version)),
+  #create a dataset that captures which of the individual variables (sv_b) are being passed along
+  selected_sv = target(selected_vars(sv_b), transform = combine(sv_b)),
   
-  #get the model objects for these ones
-  best_svals = target(fit_model(pr = pr, best_version_vars, ret_opt = 'svals'),
-                       transform = map(best_version_vars)),
+  #save the results
+  res = saveRDS(list(pr_s, selected_sv), file = file_out(file.path(output, 'sing_var_splines.rds'))),
   
-  #add values to the dataset
-  pr_s = target(add_cols_to_pr(pr, best_svals),
-                transform = combine(best_svals)),
-  
-  #compute spline interactions
-  spline_oos = target(gam_cross_val(pr = pr, iv = c(best_version$iv1, best_version_vars), fold_col = !!fcols),
-                       transform = cross(best_version, best_version_vars)),
-  
-  #find which instance of splines is the best by variable
-  by_so = target(select_pvar(spline_oos), transform = combine(spline_oos, .by = c(prod, group_var))),
-  
-  #for each prod/group_var pair, find which transform is the best
-  best_transform = target(best_trans(by_so, best_version), transform = combine(by_so, best_version, .by = c(prod, group_var))),
-  
-  #And compute the full model
-  
-  #create new raster bricks for those
-  
-  trace = T
+   trace = T
   
 )
 
