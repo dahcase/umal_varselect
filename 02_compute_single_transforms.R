@@ -1,4 +1,4 @@
-#drake::r_make('~/Documents/code/umal_varselect/02_assess_variables_drake.R')
+#drake::r_make('~/Documents/code/umal_varselect/02_compute_single_transforms.R')
 
 library('data.table')
 library('raster')
@@ -11,8 +11,9 @@ library('tidyr')
 indir = '/media/dan/variable_selection/v2/'
 output = '/media/dan/variable_selection/v4/'
 outdir = output
-if (!dir.exists(paste0(output, '.drake')))
-  c1 = new_cache(path = paste0(output, '.drake'))
+dc = file.path(output, 'single_variable', '.drake')
+if (!dir.exists(dc))
+  c1 = new_cache(path = dc)
 
 nfolds = 5
 nrounds = 5
@@ -81,11 +82,11 @@ plan = drake_plan(
   #save the results
   res = saveRDS(list(pr_s, selected_sv), file = file_out(file.path(output, 'sing_var_splines.rds'))),
   
-   trace = T
+  trace = T
   
 )
 
-a = drake_config(plan, cache_log_file = '~/Documents/code/umal_varselect/cache_log.csv',
+a = drake_config(plan, cache_log_file = '~/Documents/code/umal_varselect/cache_log_single_variable.csv',
                  cache = drake_cache(paste0(output, '.drake')))
 
 a
